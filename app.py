@@ -490,6 +490,9 @@ class TeachableMachineApp(QMainWindow):
         ev.accept()
 
 def main():
+    import PySide6.QtGui as QtGui
+    QtGui.QGuiApplication.setDesktopFileName("San3a-ML-Runner")
+
     app = QApplication(sys.argv)
 
     # your published Google Sheet CSV link:
@@ -503,6 +506,9 @@ def main():
 
     window = TeachableMachineApp()
     window.show()
+    window.raise_()
+    window.activateWindow()
+
 
     sys.exit(app.exec())
 

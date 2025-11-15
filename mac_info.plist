@@ -1,19 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-
 <plist version="1.0">
 <dict>
+    <key>CFBundleName</key>
+    <string>San3a-ML-Runner</string>
+
     <key>CFBundleDisplayName</key>
     <string>San3a ML Runner</string>
 
-    <key>NSCameraUsageDescription</key>
-    <string>App needs camera for AI image inference.</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.san3a.academy.mlrunner</string>
 
-    <key>NSMicrophoneUsageDescription</key>
-    <string>App needs microphone for audio classification.</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
 
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Optional: for serial devices via Bluetooth.</string>
+    <!-- CRITICAL: makes the app appear in front and accept keyboard input -->
+    <key>LSBackgroundOnly</key>
+    <false/>
+
+    <!-- CRITICAL: tells macOS this is a full cocoa GUI app -->
+    <key>LSUIElement</key>
+    <false/>
+
+    <!-- Optional but good -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
 </dict>
 </plist>

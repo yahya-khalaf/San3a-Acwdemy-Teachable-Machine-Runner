@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Stop on first error
-set -e
-
 echo "=== Activating virtual environment ==="
 source .venv/bin/activate
 
@@ -10,22 +7,18 @@ echo "=== Removing old build/dist folders ==="
 rm -rf build dist
 
 echo "=== Running PyInstaller ==="
-pyinstaller build.spec --clean --windowed
+pyinstaller build.spec --clean
 
-echo "=== Fixing macOS quarantine attribute ==="
-# Remove Apple “quarantine” flag, otherwise the app cannot access camera/mic
-xattr -r -d com.apple.quarantine "dist/San3a-ML-Runner.app" || true
+echo "=== Removing macOS quarantine (important) ==="
+xattr -r -d com.apple.quarantine dist/San3a-ML-Runner.app || true
 
-echo "=== Ensuring Qt plugins are properly bundled ==="
-# Sometimes QtWebEngine or platform plugins are missing—force copy
-QT_PATH=$(python3 -c "import PySide6, os; print(os.path.dirname(PySide6.__file__))")
+echo "=== Copying required Qt plugins ==="
+QTPATH=$(python3 -c "import PySide6; import os; print(os.path.dirname(PySide6.__file__))")
 
-mkdir -p "dist/San3a-ML-Runner.app/Contents/Plugins"
-cp -R "$QT_PATH/Qt/plugins/" "dist/San3a-ML-Runner.app/Contents/Plugins/" || true
+mkdir -p dist/San3a-ML-Runner.app/Contents/PlugIns/platforms
+cp -R "$QTPATH/Qt/plugins/platforms" dist/San3a-ML-Runner.app/Contents/PlugIns/
 
-echo "=== Ensuring Qt frameworks are bundled ==="
-mkdir -p "dist/San3a-ML-Runner.app/Contents/Frameworks"
-cp -R "$QT_PATH/Qt/lib/" "dist/San3a-ML-Runner.app/Contents/Frameworks/" || true
+mkdir -p dist/San3a-ML-Runner.app/Contents/PlugIns/imageformats
+cp -R "$QTPATH/Qt/plugins/imageformats" dist/San3a-ML-Runner.app/Contents/PlugIns/
 
-echo "=== macOS build completed successfully ==="
-echo "Your app is at: dist/San3a-ML-Runner.app"
+echo "=== Build Complete! You can now compress the .app into a ZIP. ==="
