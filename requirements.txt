@@ -1,0 +1,10 @@
+PySide6>=6.4.0
+opencv-python>=4.6.0
+numpy>=1.21.0
+sounddevice>=0.4.5
+pyserial>=3.5
+requests
+tensorflow-macos==2.14.0 ; sys_platform == "darwin"
+tflite-runtime==2.14.0 ; sys_platform == "win32"
+python_speech_features
+scipy

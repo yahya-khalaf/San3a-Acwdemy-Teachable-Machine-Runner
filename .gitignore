@@ -1,0 +1,86 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.so
+*.dll
+*.log
+*.tmp
+*.temp
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Jupyter (just in case)
+.ipynb_checkpoints/
+
+# VSCode / PyCharm
+.vscode/
+.idea/
+
+# -------------------------
+# Operating System
+# -------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+dist/
+build/
+*.app
+*.dmg
+*.zip
+*.pkg
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.exe
+*.msi
+
+# -------------------------
+# PyInstaller
+# -------------------------
+build/
+dist/
+*.spec
+
+# PyInstaller cache
+__pyinstaller/
+*.manifest
+*.toc
+
+# Exclude unpacked Qt plugins
+PySide6/plugins/platforms/*
+PySide6/plugins/imageformats/*
+PySide6/plugins/wayland*
+PySide6/plugins/renderers/*
+
+# -------------------------
+# Application-specific
+# -------------------------
+
+# Model files (optional but recommended)
+*.tflite
+labels.txt
+metadata.json
+
+# Backup or temp folders
+*.bak
+*.old
+*.swp
+*.swo
+
+# User runtime files
+core/__pycache__/
+app.log
