@@ -26,6 +26,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QImage, QFont, QDoubleValidator
 
 import numpy as np
+import cv2 # Import cv2 for camera listing
 
 # import core modules
 from core.model_wrapper import ModelWrapper
@@ -52,7 +53,9 @@ class LoginDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self.user_input = QLineEdit()
+        self.user_input.setPlaceholderText("Username")
         self.pass_input = QLineEdit()
+        self.pass_input.setPlaceholderText("Password")
         self.pass_input.setEchoMode(QLineEdit.Password)
 
         layout.addWidget(QLabel("Username"))
@@ -72,16 +75,25 @@ class LoginDialog(QDialog):
         layout.addWidget(reg_btn)
 
         self.msg = QLabel("")
+        self.msg.setStyleSheet("color: red")
         layout.addWidget(self.msg)
 
     def try_login(self):
         user = self.user_input.text()
         pwd = self.pass_input.text()
 
-        if self.auth.check_login(user, pwd):
+        self.msg.setText("Connecting...")
+        self.msg.setStyleSheet("color: blue")
+        QApplication.processEvents() # Force UI update
+
+        # Updated to handle tuple return (success, message)
+        success, message = self.auth.check_login(user, pwd)
+
+        if success:
             self.accept()
         else:
-            self.msg.setText("Invalid login or inactive account.")
+            self.msg.setStyleSheet("color: red")
+            self.msg.setText(message)
 
     def open_register(self):
         import webbrowser
@@ -157,6 +169,17 @@ class TeachableMachineApp(QMainWindow):
         self.model_info_label = QLabel("Model Type: Unknown")
         mlay.addWidget(self.model_info_label)
         layout.addWidget(model_box)
+
+        # --- Camera Selection Group Box ---
+        camera_box = QGroupBox("Camera")
+        cl = QVBoxLayout(camera_box)
+        self.camera_combo = QComboBox()
+        self.refresh_camera_btn = QPushButton("Refresh Cameras")
+        self.refresh_camera_btn.clicked.connect(self.refresh_cameras)
+        cl.addWidget(self.camera_combo)
+        cl.addWidget(self.refresh_camera_btn)
+        layout.addWidget(camera_box)
+        # -----------------------------------
 
         serial_box = QGroupBox("Serial")
         sl = QVBoxLayout(serial_box)
@@ -256,6 +279,40 @@ class TeachableMachineApp(QMainWindow):
         self.serial_worker.error_occurred.connect(self.on_serial_error)
         self.serial_worker.data_received.connect(self.on_serial_data)
         self.refresh_ports()
+        self.refresh_cameras() # Initialize camera list
+
+    def refresh_cameras(self):
+        self.camera_combo.clear()
+        # Look for available cameras by checking indices 0 through 9
+        max_cameras = 10
+        for i in range(max_cameras):
+            try:
+                # Attempt to open the camera with common backends
+                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW) # Use DSHOW for faster check on Windows
+                if not cap.isOpened():
+                    cap.release()
+                    cap = cv2.VideoCapture(i, cv2.CAP_V4L2) # Try V4L2 for Linux
+                    if not cap.isOpened():
+                         cap.release()
+                         cap = cv2.VideoCapture(i, cv2.CAP_AVFOUNDATION) # Try AVFoundation for Mac
+                         if not cap.isOpened():
+                             cap.release()
+                             cap = cv2.VideoCapture(i) # Final generic fallback
+                             if not cap.isOpened():
+                                 cap.release()
+                                 continue
+                
+                # Try to get a frame to confirm it's a valid device
+                ret, _ = cap.read()
+                cap.release()
+                if ret:
+                    self.camera_combo.addItem(f"Camera {i}", i) # Store index as data
+            except Exception:
+                pass 
+
+        if self.camera_combo.count() == 0:
+            self.camera_combo.addItem("Default Camera (Index 0)", 0)
+
 
     def refresh_ports(self):
         import serial.tools.list_ports
@@ -268,6 +325,11 @@ class TeachableMachineApp(QMainWindow):
             print(f"[app] refresh ports error: {e}")
 
     def load_model(self):
+        # Prevent loading if running (UI lock should handle this, but double check)
+        if self.camera_thread or self.audio_recorder:
+            QMessageBox.warning(self, "Warning", "Please stop inference before loading a new model.")
+            return
+
         file_path, _ = QFileDialog.getOpenFileName(self, "Load Model", "", "TensorFlow Lite (*.tflite)")
         if not file_path:
             return
@@ -284,7 +346,7 @@ class TeachableMachineApp(QMainWindow):
             self.populate_label_mapping()
             self.update_status("Ready - Model loaded")
         else:
-            QMessageBox.critical(self, "Error", "Failed to load model")
+            QMessageBox.critical(self, "Error", "Failed to load model. Ensure it is a valid TFLite file.")
 
     def populate_label_mapping(self):
         if not self.model_wrapper.model_info:
@@ -304,25 +366,37 @@ class TeachableMachineApp(QMainWindow):
             dev = self.port_combo.currentData()
             if dev:
                 self.serial_worker.connect_port(dev, 115200)
-                self.connect_btn.setEnabled(False)
-                self.disconnect_btn.setEnabled(True)
+                # UI updates handled in on_serial_connection_changed
                 self.serial_status_label.setText("Connecting...")
+                self.connect_btn.setEnabled(False) # Prevent double click
         else:
             self.disconnect_serial()
 
     def disconnect_serial(self):
         self.serial_worker.disconnect_port()
-        self.connect_btn.setEnabled(True)
-        self.disconnect_btn.setEnabled(False)
-        self.serial_status_label.setText("Disconnected")
+        self.serial_status_label.setText("Disconnecting...")
+        self.disconnect_btn.setEnabled(False) # Prevent double click
 
     def on_serial_connection_changed(self, connected: bool):
+        # Updates UI based on connection state
         if connected:
             self.serial_status_label.setText("Connected")
             self.status_indicators["Serial"].setText("Serial: Connected")
+            self.connect_btn.setEnabled(False)
+            self.disconnect_btn.setEnabled(True)
+            
+            # LOCK Serial UI controls to prevent changing port while connected
+            self.port_combo.setEnabled(False)
+            self.refresh_ports_btn.setEnabled(False)
         else:
             self.serial_status_label.setText("Disconnected")
             self.status_indicators["Serial"].setText("Serial: Disconnected")
+            self.connect_btn.setEnabled(True)
+            self.disconnect_btn.setEnabled(False)
+            
+            # UNLOCK Serial UI controls
+            self.port_combo.setEnabled(True)
+            self.refresh_ports_btn.setEnabled(True)
 
     def on_serial_error(self, msg):
         QMessageBox.warning(self, "Serial Error", msg)
@@ -346,44 +420,64 @@ class TeachableMachineApp(QMainWindow):
         except Exception:
             self.threshold_input.setText(f"{self.confidence_threshold:.2f}")
 
+    def set_inference_ui_locked(self, locked: bool):
+        """Locks/Unlocks configuration UI elements during inference."""
+        self.load_btn.setEnabled(not locked)
+        self.camera_combo.setEnabled(not locked)
+        self.refresh_camera_btn.setEnabled(not locked)
+        
+        self.start_btn.setEnabled(not locked)
+        self.stop_btn.setEnabled(locked)
+
     def start_inference(self):
         if not self.model_wrapper.model_info:
             QMessageBox.warning(self, "Error", "No model loaded")
             return
+        
         t = self.model_wrapper.model_info.model_type
+        success = False
         if t == "image":
-            self.start_image_inference()
+            success = self.start_image_inference()
         elif t == "audio":
-            self.start_audio_inference()
+            success = self.start_audio_inference()
         else:
             QMessageBox.warning(self, "Error", "Unknown model type")
+            
+        if success:
+            self.set_inference_ui_locked(True)
+            self.status_indicators["Inference"].setText("Inference: Running")
 
     def start_image_inference(self):
-        self.camera_thread = CameraThread()
+        camera_index = self.camera_combo.currentData() if self.camera_combo.currentData() is not None else 0
+
+        self.camera_thread = CameraThread(camera_index=camera_index)
         self.camera_thread.frame_ready.connect(self.on_frame)
         self.camera_thread.error_occurred.connect(self.on_camera_error)
+        
         self.image_worker = ImageInferenceWorker(self.model_wrapper, max_fps=8)
         self.image_worker.prediction_ready.connect(self.on_prediction)
+        
         self.camera_thread.start()
         self.image_worker.start()
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
-        self.status_indicators["Camera"].setText("Camera: Active")
-        self.status_indicators["Inference"].setText("Inference: Running")
+        
+        self.status_indicators["Camera"].setText(f"Camera: Active (Index {camera_index})")
+        return True
 
     def start_audio_inference(self):
         sample_rate = getattr(self.model_wrapper.model_info, "metadata", {}).get("audio", {}).get("sampleRate", 16000)
+        
         self.audio_recorder = AudioRecorder(sample_rate=int(sample_rate), chunk_size=1024)
         self.audio_recorder.audio_ready.connect(self.on_audio_chunk)
         self.audio_recorder.error_occurred.connect(self.on_audio_error)
+        
         self.audio_worker = AudioInferenceWorker(self.model_wrapper, frames_to_accumulate=4)
         self.audio_worker.prediction_ready.connect(self.on_prediction)
+        
         self.audio_recorder.start()
         self.audio_worker.start()
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
+        
         self.status_indicators["Audio"].setText("Audio: Active")
-        self.status_indicators["Inference"].setText("Inference: Running")
+        return True
 
     def stop_inference(self):
         # stop camera
@@ -404,20 +498,16 @@ class TeachableMachineApp(QMainWindow):
             self.audio_worker.stop()
             self.audio_worker = None
 
-        self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
+        self.set_inference_ui_locked(False)
         self.status_indicators["Inference"].setText("Inference: Stopped")
-
         self.preview_label.setText("No preview available")
 
     def on_frame(self, frame):
-        # show preview
         self.show_preview(frame)
         if self.image_worker:
             self.image_worker.add_frame(frame)
 
     def on_audio_chunk(self, pcm):
-        # display audio peak
         try:
             peak = int(np.max(np.abs(pcm)))
             self.preview_label.setText(f"Audio Level: {peak}")
@@ -428,7 +518,6 @@ class TeachableMachineApp(QMainWindow):
 
     def show_preview(self, frame):
         try:
-            import cv2
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb.shape
             bytes_per_line = ch * w

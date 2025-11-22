@@ -4,6 +4,7 @@ import serial
 import serial.tools.list_ports
 import queue
 import time
+from serial.serialutil import SerialException # Import for catching disconnect errors
 
 class SerialWorker(QThread):
     connection_changed = Signal(bool)
@@ -68,16 +69,39 @@ class SerialWorker(QThread):
                         try:
                             self._serial.write(cmd.encode('utf-8'))
                             self._serial.flush()
+                        except SerialException as e:
+                            # CRITICAL: Device unplugged during write
+                            self.error_occurred.emit(f"Serial device disconnected during write: {e}")
+                            if self._serial:
+                                try:
+                                    self._serial.close()
+                                except Exception:
+                                    pass
+                            self.connected = False
+                            self.connection_changed.emit(False)
+                            break # Exit command loop as connection is now broken
                         except Exception as e:
                             self.error_occurred.emit(f"Serial write error: {e}")
+
                     # non-blocking read
                     try:
-                        if self._serial.in_waiting:
+                        # Check connected flag again after potential write-failure disconnect
+                        if self.connected and self._serial.in_waiting:
                             line = self._serial.readline().decode('utf-8', errors='ignore').strip()
                             if line:
                                 self.data_received.emit(line)
+                    except SerialException as e:
+                        # CRITICAL: Device unplugged during read or in_waiting check
+                        self.error_occurred.emit(f"Serial device disconnected during read: {e}")
+                        if self._serial:
+                            try:
+                                self._serial.close()
+                            except Exception:
+                                pass
+                        self.connected = False
+                        self.connection_changed.emit(False)
                     except Exception:
-                        pass
+                        pass # Catch other read errors silently as before
             except Exception as e:
                 self.error_occurred.emit(f"Serial loop error: {e}")
             time.sleep(0.01)

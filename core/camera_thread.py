@@ -24,7 +24,6 @@ class CameraThread(QThread):
         self._running = True
         try:
             # Try default backends; OpenCV picks appropriate backend itself
-            # self.cap = cv2.VideoCapture(self.camera_index)
             if IS_MAC:
                 self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_AVFOUNDATION)
             elif IS_WINDOWS:
@@ -34,7 +33,7 @@ class CameraThread(QThread):
             
 
             if not self.cap.isOpened():
-                self.error_occurred.emit("Cannot open camera")
+                self.error_occurred.emit(f"Cannot open camera index {self.camera_index}")
                 return
 
             # set properties as best effort
